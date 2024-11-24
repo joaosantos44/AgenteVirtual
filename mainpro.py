@@ -1,14 +1,25 @@
-import streamlit as st
+from langchain.chains.history_aware_retriever import create_history_aware_retriever
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_community.vectorstores import Pinecone as PipeconeLangchain
+from langchain_experimental.agents.agent_toolkits import create_csv_agent
+from langchain.agents import (create_react_agent, AgentExecutor)
+from langchain.chains.retrieval import create_retrieval_chain
 from langchain_experimental.tools import PythonREPLTool
-from langchain import hub
-from langchain_openai import ChatOpenAI
-from langchain.agents import create_react_agent
-from dotenv import load_dotenv
 from langchain.agents import AgentExecutor
+from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_core.tools import Tool
+from streamlit_chat import message
+from dotenv import load_dotenv
+from pinecone import Pinecone
+from typing import Any, Dict
+from langchain import hub
+import streamlit as st
 import datetime
 import os
 
 load_dotenv()
+
+
 
 def save_history(question, answer):
     with open("history.txt", "a") as f:
@@ -22,9 +33,9 @@ def load_history():
 
 def main():
     st.set_page_config(page_title="Agente de Python",
-                       page_icon="⚔️",
+                       page_icon="👾",
                        layout="wide")
-    st.title("⚔️ Agente de Python")
+    st.title("👾 Agente de Python 👾")
     st.markdown(
         """
         <style>
@@ -49,7 +60,7 @@ def main():
 
     base_prompt =hub.pull("langchain-ai/react-agent-template")
     prompt = base_prompt.partial(instrucciones=instrucciones)
-    st.write("Prompt cargando...")
+    st.write("Cargando...")
 
     tool = [PythonREPLTool()]
     llm = ChatOpenAI(model = "gpt-4o", temperature = 0)
@@ -59,14 +70,16 @@ def main():
         prompt=prompt
     )
 
+
     agent_executor = AgentExecutor(
         agent=agent,
         tools=tool,
+        path=["episode_info.csv", "classes.csv", "elden_ring_weapon.csv", "equipment.csv", "monsters.csv", "Pokemon.csv", "races.csv", "spells.CSV"],
         verbose=True,
         handle_parsing_errors=True,
     )
 
-    st.markdown("### Ejemplos: ")
+    st.markdown("### Listado: ")
 
     ejemplos = [
         "calcula la suma de 2 y 3",
@@ -77,7 +90,7 @@ def main():
 
     example = st.selectbox("Selecciona una opcion:", ejemplos)
 
-    if st.button("Ejecutar ejemplo"):
+    if st.button("Ejecutar opcion"):
         user_input = example
         try:
             respuesta = agent_executor.invoke(input={"input": user_input, "instructions": instrucciones, "agent_scratchpad": ""})
@@ -87,6 +100,34 @@ def main():
         except  ValueError as e:
             st.error(f"Error en el agente: {str(e)}")
 
+    st.markdown("### Preguntas: ")
+
+    contenido = """
+        El contenido del que se le puede preguntar al agente es sobre Pokemon, Elden Ring y D&D.
+        """
+
+    st.markdown(contenido)
+
+    prompt = st.text_input("Prompt", placeholder="Enter Your prompt here")
+
+
+    instru2 = """You are an agent designed to write and execute Python code to answer questions.
+        You have access to a python REPL, which you can use to execute python code.
+        You have qrcode package installed
+        If you get an error, debug your code and try again.
+        Only use the output of your code to answer the question.
+        You might know the answer without running any code, but you should still run the code to get the answer.
+        If it does not seem like you can write code to answer the question, just return "I don't know" as the answer.
+        """
+    if st.button("Ejecutar pregunta"):
+        user_input2 = prompt
+        try:
+            respuesta = agent_executor.invoke(input={"input": user_input2, "instructions": instru2, "agent_scratchpad": ""})
+            st.markdown("### Resultado del agente:")
+            st.code(respuesta["output"], language="python")
+            save_history(user_input2, respuesta["output"])
+        except  ValueError as e:
+            st.error(f"Error en el agente: {str(e)}")
 
 if __name__ == "__main__":
     main()
